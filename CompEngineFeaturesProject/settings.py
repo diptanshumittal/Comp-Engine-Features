@@ -24,21 +24,22 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # SECURITY WARNING: keep the secret key used in production secret!
 
-SECRET_KEY = config('SECRET_KEY') 
+#SECRET_KEY = config('SECRET_KEY') 
+SECRET_KEY = '7fea)agzt#$+opj(@htikxso#%(b-6os8n56a9uw*o9&yjm75'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 #Add Allowed host here
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.1.6']
 
 
+'''
+CSRF_COOKIE_SECURE=False
 
-CSRF_COOKIE_SECURE=True
+SECURE_SSL_REDIRECT=False
 
-SECURE_SSL_REDIRECT=True
-
-SESSION_COOKIE_SECURE=True
+SESSION_COOKIE_SECURE=False
 
 SECURE_HSTS_SECONDS=31526000
 
@@ -49,7 +50,7 @@ SECURE_HSTS_PRELOAD=True
 SECURE_REFERRER_POLICY="strict-origin"
 
 SECURE_BROWSER_XSS_FILTER = True
-
+'''
 
 # Application definition
 
@@ -60,20 +61,23 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'CompEngineFeaturesWeb',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    #'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
 ]
 
 
-
+CORS_ORIGIN_ALLOW_ALL = True
 
 ROOT_URLCONF = 'CompEngineFeaturesProject.urls'
 
