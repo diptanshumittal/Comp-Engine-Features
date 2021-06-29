@@ -1,0 +1,3 @@
+ENC("ZcU506Y2bew0T6nft/9HMfxr74uPOb/0") #
+docker build --rm -t mktg-channel-service .
+docker run -e "SERVICE_ENV=desktop" -p 8080:8080 mktg-channel-service
