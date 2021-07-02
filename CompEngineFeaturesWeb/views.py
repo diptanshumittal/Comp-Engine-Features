@@ -57,7 +57,8 @@ def getfeatures(request):
 
 
 def gettimeseries(request, timeseriesname):
-    number = AlltimeSeriesNames.index(timeseriesname)
+    number = AlltimeSeriesNames.index(timeseriesname)-1
+    print(number)
     dic = {
         "name": AlltimeSeriesNames[number],
         "ydata": Alltimeseries[number],

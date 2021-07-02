@@ -8,40 +8,41 @@ from scipy.stats import spearmanr
 import warnings
 from csv import reader
 
-'''
-warnings.filterwarnings("ignore",category=RuntimeWarning)
-warnings.filterwarnings("ignore",category=UserWarning)
-
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 keywords = pd.read_csv('hctsa_features.csv')
 hctsa = pd.read_csv('hctsa_datamatrix.csv')
 myclient = MongoClient(port=27017)
 mydb = myclient["CompEngineFeaturesDatabase"]
-mycol = mydb["Temp2"]
+mycol = mydb["Temp"]
 li = list(np.random.permutation(7702))[:500]
 cnt = 0
 for i in li:
-  print(cnt)
-  cnt+=1
-  dic = {}
-  temp = list(keywords.iloc[i])
-  dic["ID"] = int(temp[0])
-  dic["NAME"] = temp[1]
-  dic["KEYWORDS"] = temp[2]
-  temp = list(hctsa.iloc[:,i])
-  dic["HCTSA_TIMESERIES_VALUE"] = dp(temp)
-  coefList = []
-  pval = []
-  for j in li:
-    coef , p =0 ,0
-    if (hctsa.iloc[:,j].isna().sum())<50:
-      coef, p = spearmanr(hctsa.iloc[:,j],temp,nan_policy="omit")
-    coefList.append(str(format(coef,'.3f')))
-    pval.append(str(format(p,'.3f')))
-  dic["COEF"] = coefList
-  dic['PVALUE'] = pval
-  mycol.insert_one(dic)
-'''
+    print(cnt)
+    cnt += 1
+    dic = {}
+    temp = list(keywords.iloc[i])
+    dic["ID"] = int(temp[0])
+    dic["NAME"] = temp[1]
+    dic["KEYWORDS"] = temp[2]
+    temp = list(hctsa.iloc[:, i])
+    dic["HCTSA_TIMESERIES_VALUE"] = dp(temp)
+    coefList = []
+    pval = []
+    for j in li:
+        coef, p = 0, 0
+        try:
+            if (hctsa.iloc[:, j].isna().sum()) < 50:
+                coef, p = spearmanr(hctsa.iloc[:, j], hctsa.iloc[:, i], nan_policy="omit")
+        except:
+            print("Exception")
+        finally:
+            coefList.append(str(format(coef, '.3f')))
+            pval.append(str(format(p, '.3f')))
+    dic["COEF"] = coefList
+    dic['PVALUE'] = pval
+    mycol.insert_one(dic)
 
 '''
 myclient = MongoClient(port=27017)
@@ -86,7 +87,7 @@ x = mycol.find_one({'ID': {'$in':[5718]}},{ "_id": 0, "NAME":0, "KEYWORD":0, "ID
 print(x)
 '''
 
-
+'''
 # Function to add All_Time_Series in MongoDB
 def addAllTimeSeries():
     myclient = MongoClient(port=27017)
@@ -105,13 +106,13 @@ def addAllTimeSeries():
         li = list(csv_reader)
         for i in li:
             temp = i[2].split(",")
-            if('dynsys' in temp):
+            if ('dynsys' in temp):
                 Alltimeseriescategory.append("Ordinary Differential Equation (ODE)")
-            elif('map' in temp):
+            elif ('map' in temp):
                 Alltimeseriescategory.append("Iterative map (Map)")
-            elif('noise' in temp):
+            elif ('noise' in temp):
                 Alltimeseriescategory.append("Uncorrelated noise (Noise)")
-            elif('synthetic' in temp):
+            elif ('synthetic' in temp):
                 Alltimeseriescategory.append("Synthetic (Other)")
             else:
                 Alltimeseriescategory.append("Real-world")
@@ -120,7 +121,9 @@ def addAllTimeSeries():
         dic = {"NAME": Alltimeseriesname[i], "TIMESERIES": Alltimeseries[i], "CATEGORY": Alltimeseriescategory[i]}
         mycol.insert_one(dic)
 
+
 addAllTimeSeries()
+
 
 def getAllTimeSeries():
     myclient = MongoClient(port=27017)
@@ -132,3 +135,4 @@ def getAllTimeSeries():
 
 
 getAllTimeSeries()
+'''
