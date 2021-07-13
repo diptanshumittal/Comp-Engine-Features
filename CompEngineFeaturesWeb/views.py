@@ -5,7 +5,7 @@ import urllib
 import warnings
 from collections import OrderedDict
 from operator import itemgetter
-
+from copy import deepcopy as dp
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -27,8 +27,8 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 myclient = MongoClient(port=27017)
 mydb = myclient["CompEngineFeaturesDatabase"]
-mycol = mydb["Temp"]
-features = []
+mycol = mydb["FeaturesCollection"]
+AllFeatures = []
 Alltimeseries = []
 AlltimeSeriesNames = []
 AlltimeseriesCategory = []
@@ -45,20 +45,27 @@ def getAllTimeSeries():
 
 getAllTimeSeries()
 TimeSeriesCategory = list(set(AlltimeseriesCategory))
-print(TimeSeriesCategory)
 for x in mycol.find({}, {"_id": 0, "HCTSA_TIMESERIES_VALUE": 0, "COEF": 0, "PVALUE": 0}):
-    features.append(x)
-
+    AllFeatures.append(x)
 
 # Add views here
+featureDic = {}
+
 
 def getfeatures(request):
-    return JsonResponse({"data": features})
+    if len(featureDic) == 0:
+        for i in AllFeatures:
+            tdic = {
+                "id": i["ID"],
+                "NAME": i["NAME"],
+                "KEYWORDS": i["KEYWORDS"]
+            }
+            featureDic[i["ID"]] = tdic
+    return JsonResponse(featureDic)
 
 
 def gettimeseries(request, timeseriesname):
-    number = AlltimeSeriesNames.index(timeseriesname)-1
-    print(number)
+    number = AlltimeSeriesNames.index(timeseriesname)
     dic = {
         "name": AlltimeSeriesNames[number],
         "ydata": Alltimeseries[number],
@@ -130,6 +137,48 @@ def splittimeseries(arr):
     return res
 
 
+def apiNetwork(request, fid, nodes):
+    nodes = min(20, int(nodes))
+    x = mycol.find_one({'ID': int(fid)}, {"_id": 0, "NAME": 0, "KEYWORDS": 0, "ID": 0, "HCTSA_TIMESERIES_VALUE": 0})
+    x["COEF"] = np.array(x["COEF"]).astype(np.float64)
+    x["PVALUE"] = np.array(x["PVALUE"]).astype(np.float64)
+    res = []
+    for i in range(len(AllFeatures)):
+        if (x["PVALUE"][i] > alpha):
+            continue
+        res.append(dp(AllFeatures[i]))
+        res[-1]['COEF'] = x["COEF"][i]
+        res[-1]['PVALUE'] = x["PVALUE"][i]
+        res[-1]['COEF_ABS'] = abs(x["COEF"][i])
+    DATAFRAME = pd.DataFrame(res)
+    DATAFRAME = DATAFRAME.sort_values(by='COEF_ABS', ascending=False)
+    PairWise = pd.DataFrame()
+    for i in range(min(nodes, len(DATAFRAME))):
+        temp = mycol.find_one({'ID': int(DATAFRAME.iloc[i, 0])}, {"HCTSA_TIMESERIES_VALUE": 1})
+        PairWise[DATAFRAME.iloc[i, 1]] = temp['HCTSA_TIMESERIES_VALUE']
+    PairWise = PairWise.fillna(0)
+    pairwise_corr = PairWise.corr(method="spearman")
+    names = list(pairwise_corr.columns)
+    networkGraph = {
+        'nodes': [],
+        'edges': []
+    }
+    for i in range(len(names)):
+        networkGraph['nodes'].append({
+            'id': i,
+            'title': int(DATAFRAME['ID'].iloc[i])
+        })
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            networkGraph['edges'].append({
+                'to': j,
+                'from': i,
+                'label': format(pairwise_corr[names[i]][names[j]], '.3f')
+            })
+    return JsonResponse(
+        {"networkGraph": networkGraph})
+
+
 def apiexploremode(request, number, fname):
     plt.switch_backend('agg')
 
@@ -137,23 +186,18 @@ def apiexploremode(request, number, fname):
     x["COEF"] = np.array(x["COEF"]).astype(np.float64)
     x["PVALUE"] = np.array(x["PVALUE"]).astype(np.float64)
     res = []
-    for i in range(len(features)):
+    for i in range(len(AllFeatures)):
         if (x["PVALUE"][i] > alpha):
             continue
-        res.append(features[i])
+        res.append(dp(AllFeatures[i]))
         res[-1]['COEF'] = x["COEF"][i]
         res[-1]['PVALUE'] = x["PVALUE"][i]
         res[-1]['COEF_ABS'] = abs(x["COEF"][i])
     res = pd.DataFrame(res)
     res = res.sort_values(by='COEF_ABS', ascending=False)
     DATAFRAME = res.drop(['COEF_ABS'], axis=1)
+    DATAFRAME = DATAFRAME.fillna(0)
     DATAFRAME['Rank'] = np.arange(1, len(DATAFRAME) + 1)
-    totalmatches = len(DATAFRAME)
-    myfulljsondata = DATAFRAME[:100]
-    res = []
-    for index, row in list(myfulljsondata.iterrows()):
-        res.append(dict(row))
-
     PairWise = pd.DataFrame()
     for i in range(13):
         temp = mycol.find_one({'ID': int(DATAFRAME.iloc[i, 0])}, {"HCTSA_TIMESERIES_VALUE": 1})
@@ -177,23 +221,53 @@ def apiexploremode(request, number, fname):
     buf.seek(0)
     string = base64.b64encode(buf.read())
     uri = urllib.parse.quote(string)
-    graph = []
-    xdata = splittimeseries(list(PairWise[fname].rank()))
+    scatterPlotsData = {
+        'xaxis': {
+            'xdata': splittimeseries(PairWise[fname].rank()),
+            'xtit': fname
+        },
+        'yaxes': []
+    }
     TimeseriesNamesDivided = splittimeseries(AlltimeSeriesNames)
     for i in range(1, 13):
-        ydata = splittimeseries(list(PairWise[DATAFRAME.iloc[i, 1]].rank()))
         gr = {
+            'title': "Correlation = " + str(DATAFRAME.iloc[i, 3]),
             'ytit': DATAFRAME.iloc[i, 1],
-            'ydata': ydata,
-            'xtit': fname,
-            'xdata': xdata,
-            'title': "Correlation = " + str(DATAFRAME.iloc[i, 3])
+            'ydata': splittimeseries(PairWise[DATAFRAME.iloc[i, 1]].rank())
         }
-        graph.append(gr)
+        scatterPlotsData['yaxes'].append(gr)
+    pairwise_corr = PairWise.corr(method="spearman")
+    names = list(pairwise_corr.columns)
+    networkGraph = {
+        'nodes': [],
+        'edges': []
+    }
+    for i in range(len(names)):
+        networkGraph['nodes'].append({
+            'id': i,
+            'title': int(DATAFRAME['ID'].iloc[i])
+        })
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            networkGraph['edges'].append({
+                'to': j,
+                'from': i,
+                'label': format(pairwise_corr[names[i]][names[j]], '.3f')
+            })
+
+    totalmatches = len(DATAFRAME)
+    DATAFRAME["id"] = DATAFRAME["ID"].astype("int64")
+    DATAFRAME = DATAFRAME.drop(['NAME'], axis=1)
+    DATAFRAME = DATAFRAME.drop(['KEYWORDS'], axis=1)
+    DATAFRAME = DATAFRAME.drop(['ID'], axis=1)
+    res = []
+    for index, row in list(DATAFRAME.iterrows()):
+        res.append(dict(row))
 
     return JsonResponse(
-        {"tabledata": res, "totalmatches": totalmatches, "featurename": fname, "heatmap": uri, "graph": graph,
-         "timeseriesnames": TimeseriesNamesDivided, "timeseriescategory": TimeSeriesCategory})
+        {"tabledata": res, "totalmatches": totalmatches, "featurename": fname, "heatmap": uri,
+         "scatterplotgraphs": scatterPlotsData, "timeseriesnames": TimeseriesNamesDivided,
+         "timeseriescategory": TimeSeriesCategory, "networkGraph": networkGraph})
 
 
 buffer = OrderedDict()
@@ -459,15 +533,9 @@ def apiresult(request):
                                    format(coef, '.3f')]
                     correlatedfeatures.append(eachfeature)
         BestMatches = sorted(correlatedfeatures, key=itemgetter(2))[::-1]
-        totalmatches = len(BestMatches)
         DATAFRAME = pd.DataFrame(BestMatches)
         DATAFRAME.columns = ['NAME', 'PVALUE', 'ABSCOEF', 'ID', 'KEYWORDS', 'COEF']
         DATAFRAME['Rank'] = np.arange(1, len(BestMatches) + 1)
-        myfulljsondata = DATAFRAME[:100]
-        res = []
-        for index, row in list(myfulljsondata.iterrows()):
-            res.append(dict(row))
-
         PairWise = pd.DataFrame()
         PairWise[featurename] = New_feature_vector
         for i in range(12):
@@ -491,18 +559,55 @@ def apiresult(request):
         buf.seek(0)
         string = base64.b64encode(buf.read())
         uri = urllib.parse.quote(string)
-        graph = []
-        xdata = splittimeseries(list(PairWise[featurename].rank()))
+        scatterPlotsData = {
+            'xaxis': {
+                'xdata': splittimeseries(PairWise[featurename].rank()),
+                'xtit': featurename
+            },
+            'yaxes': []
+        }
         TimeseriesNamesDivided = splittimeseries(AlltimeSeriesNames)
         for i in range(12):
-            ydata = splittimeseries(list(PairWise[DATAFRAME.iloc[i, 0]].rank()))
-            gr = {'ytit': DATAFRAME.iloc[i, 0], 'title': "Correlation = " + str(DATAFRAME.iloc[i, 5]),
-                  'ydata': ydata, 'xtit': featurename,
-                  'xdata': xdata}
-            graph.append(gr)
+            gr = {
+                'title': "Correlation = " + str(DATAFRAME.iloc[i, 5]),
+                'ytit': DATAFRAME.iloc[i, 0],
+                'ydata': splittimeseries(PairWise[DATAFRAME.iloc[i, 0]].rank())
+            }
+            scatterPlotsData['yaxes'].append(gr)
+
+        pairwise_corr = PairWise.corr(method="spearman")
+        names = list(pairwise_corr.columns)
+        networkGraph = {
+            'nodes': [],
+            'edges': []
+        }
+        for i in range(len(names)):
+            networkGraph['nodes'].append({
+                'id': i,
+                'title': int(DATAFRAME['ID'].iloc[i])
+            })
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                networkGraph['edges'].append({
+                    'to': j,
+                    'from': i,
+                    'label': format(pairwise_corr[names[i]][names[j]], '.3f')
+                })
+
+        totalmatches = len(DATAFRAME)
+        DATAFRAME["id"] = DATAFRAME["ID"].astype("int64")
+        DATAFRAME = DATAFRAME.drop(['NAME'], axis=1)
+        DATAFRAME = DATAFRAME.drop(['KEYWORDS'], axis=1)
+        DATAFRAME = DATAFRAME.drop(['ABSCOEF'], axis=1)
+        DATAFRAME = DATAFRAME.drop(['ID'], axis=1)
+        res = []
+        for index, row in list(DATAFRAME.iterrows()):
+            res.append(dict(row))
+
         return JsonResponse(
             {"stat": 1, "tabledata": res, "totalmatches": totalmatches, "featurename": featurename, "heatmap": uri,
-             "graph": graph, "timeseriesnames": TimeseriesNamesDivided, "timeseriescategory": TimeSeriesCategory})
+             "timeseriesnames": TimeseriesNamesDivided, "timeseriescategory": TimeSeriesCategory,
+             "networkGraph": networkGraph, "scatterplotgraphs": scatterPlotsData})
     except SyntaxError as e:
         return JsonResponse({"stat": 2})
     except Exception as e:

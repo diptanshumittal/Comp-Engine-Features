@@ -13,20 +13,27 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 keywords = pd.read_csv('hctsa_features.csv')
 hctsa = pd.read_csv('hctsa_datamatrix.csv')
+hctsa = hctsa.fillna(0)
+for col in hctsa.columns:
+    hctsa[col] = hctsa[col].astype("float64")
+col = hctsa.columns
+if hctsa.isnull().sum().sum() > 0:
+    print("NaN detected!! Exiting")
+    exit()
 myclient = MongoClient(port=27017)
 mydb = myclient["CompEngineFeaturesDatabase"]
-mycol = mydb["Temp"]
-li = list(np.random.permutation(7702))[:500]
+mycol = mydb["FeaturesCollection"]
+li = list(np.random.permutation(len(col)))[:500]
 cnt = 0
 for i in li:
-    print(cnt)
+    print(cnt, i)
     cnt += 1
     dic = {}
     temp = list(keywords.iloc[i])
     dic["ID"] = int(temp[0])
     dic["NAME"] = temp[1]
     dic["KEYWORDS"] = temp[2]
-    temp = list(hctsa.iloc[:, i])
+    temp = list(hctsa[col[i]])
     dic["HCTSA_TIMESERIES_VALUE"] = dp(temp)
     coefList = []
     pval = []
@@ -86,7 +93,6 @@ number = 5718
 x = mycol.find_one({'ID': {'$in':[5718]}},{ "_id": 0, "NAME":0, "KEYWORD":0, "ID":0})
 print(x)
 '''
-
 '''
 # Function to add All_Time_Series in MongoDB
 def addAllTimeSeries():
