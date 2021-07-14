@@ -1,5 +1,4 @@
 import base64
-import csv
 import io
 import urllib
 import warnings
@@ -53,36 +52,31 @@ featureDic = {}
 
 
 def getfeatures(request):
-    if len(featureDic) == 0:
-        for i in AllFeatures:
-            tdic = {
-                "id": i["ID"],
-                "NAME": i["NAME"],
-                "KEYWORDS": i["KEYWORDS"]
-            }
-            featureDic[i["ID"]] = tdic
-    return JsonResponse(featureDic)
+    try:
+        if len(featureDic) == 0:
+            for i in AllFeatures:
+                tdic = {
+                    "id": i["ID"],
+                    "NAME": i["NAME"],
+                    "KEYWORDS": i["KEYWORDS"]
+                }
+                featureDic[i["ID"]] = tdic
+        return JsonResponse(featureDic)
+    except Exception:
+        return JsonResponse({"error": "Recheck the API request made"})
 
 
 def gettimeseries(request, timeseriesname):
-    number = AlltimeSeriesNames.index(timeseriesname)
-    dic = {
-        "name": AlltimeSeriesNames[number],
-        "ydata": Alltimeseries[number],
-        "xdata": np.linspace(1, len(Alltimeseries[number]), len(Alltimeseries[number])).tolist()
-    }
-    return JsonResponse(dic)
-
-
-def exporter(request, number, fname):
-    data = pd.read_csv('media/matching data.csv')
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename="results.csv"'
-    writer = csv.writer(response)
-    writer.writerow(data.columns)
-    for i in range(len(data)):
-        writer.writerow(data.iloc[i])
-    return response
+    try:
+        number = AlltimeSeriesNames.index(timeseriesname)
+        dic = {
+            "name": AlltimeSeriesNames[number],
+            "ydata": Alltimeseries[number],
+            "xdata": np.linspace(1, len(Alltimeseries[number]), len(Alltimeseries[number])).tolist()
+        }
+        return JsonResponse(dic)
+    except Exception:
+        return JsonResponse({"error": "Recheck the API request made"})
 
 
 def error404page(request, exception):
@@ -138,136 +132,143 @@ def splittimeseries(arr):
 
 
 def apiNetwork(request, fid, nodes):
-    nodes = min(20, int(nodes))
-    x = mycol.find_one({'ID': int(fid)}, {"_id": 0, "NAME": 0, "KEYWORDS": 0, "ID": 0, "HCTSA_TIMESERIES_VALUE": 0})
-    x["COEF"] = np.array(x["COEF"]).astype(np.float64)
-    x["PVALUE"] = np.array(x["PVALUE"]).astype(np.float64)
-    res = []
-    for i in range(len(AllFeatures)):
-        if (x["PVALUE"][i] > alpha):
-            continue
-        res.append(dp(AllFeatures[i]))
-        res[-1]['COEF'] = x["COEF"][i]
-        res[-1]['PVALUE'] = x["PVALUE"][i]
-        res[-1]['COEF_ABS'] = abs(x["COEF"][i])
-    DATAFRAME = pd.DataFrame(res)
-    DATAFRAME = DATAFRAME.sort_values(by='COEF_ABS', ascending=False)
-    PairWise = pd.DataFrame()
-    for i in range(min(nodes, len(DATAFRAME))):
-        temp = mycol.find_one({'ID': int(DATAFRAME.iloc[i, 0])}, {"HCTSA_TIMESERIES_VALUE": 1})
-        PairWise[DATAFRAME.iloc[i, 1]] = temp['HCTSA_TIMESERIES_VALUE']
-    PairWise = PairWise.fillna(0)
-    pairwise_corr = PairWise.corr(method="spearman")
-    names = list(pairwise_corr.columns)
-    networkGraph = {
-        'nodes': [],
-        'edges': []
-    }
-    for i in range(len(names)):
-        networkGraph['nodes'].append({
-            'id': i,
-            'title': int(DATAFRAME['ID'].iloc[i])
-        })
-    for i in range(len(names)):
-        for j in range(i + 1, len(names)):
-            networkGraph['edges'].append({
-                'to': j,
-                'from': i,
-                'label': format(pairwise_corr[names[i]][names[j]], '.3f')
+    try:
+        nodes = min(20, int(nodes))
+        x = mycol.find_one({'ID': int(fid)}, {"_id": 0, "NAME": 0, "KEYWORDS": 0, "ID": 0, "HCTSA_TIMESERIES_VALUE": 0})
+        x["COEF"] = np.array(x["COEF"]).astype(np.float64)
+        x["PVALUE"] = np.array(x["PVALUE"]).astype(np.float64)
+        res = []
+        for i in range(len(AllFeatures)):
+            if (x["PVALUE"][i] > alpha):
+                continue
+            res.append(dp(AllFeatures[i]))
+            res[-1]['COEF'] = x["COEF"][i]
+            res[-1]['PVALUE'] = x["PVALUE"][i]
+            res[-1]['COEF_ABS'] = abs(x["COEF"][i])
+        DATAFRAME = pd.DataFrame(res)
+        DATAFRAME = DATAFRAME.sort_values(by='COEF_ABS', ascending=False)
+        PairWise = pd.DataFrame()
+        for i in range(min(nodes, len(DATAFRAME))):
+            temp = mycol.find_one({'ID': int(DATAFRAME.iloc[i, 0])}, {"HCTSA_TIMESERIES_VALUE": 1})
+            PairWise[DATAFRAME.iloc[i, 1]] = temp['HCTSA_TIMESERIES_VALUE']
+        PairWise = PairWise.fillna(0)
+        pairwise_corr = PairWise.corr(method="spearman")
+        names = list(pairwise_corr.columns)
+        networkGraph = {
+            'nodes': [],
+            'edges': []
+        }
+        for i in range(len(names)):
+            networkGraph['nodes'].append({
+                'id': i,
+                'title': int(DATAFRAME['ID'].iloc[i])
             })
-    return JsonResponse(
-        {"networkGraph": networkGraph})
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                networkGraph['edges'].append({
+                    'to': j,
+                    'from': i,
+                    'label': format(pairwise_corr[names[i]][names[j]], '.3f')
+                })
+        return JsonResponse(
+            {"networkGraph": networkGraph})
+    except Exception:
+        return JsonResponse({"error": "Recheck the API request made"})
 
 
 def apiexploremode(request, number, fname):
-    plt.switch_backend('agg')
+    try:
+        plt.switch_backend('agg')
 
-    x = mycol.find_one({'ID': int(number)}, {"_id": 0, "NAME": 0, "KEYWORDS": 0, "ID": 0, "HCTSA_TIMESERIES_VALUE": 0})
-    x["COEF"] = np.array(x["COEF"]).astype(np.float64)
-    x["PVALUE"] = np.array(x["PVALUE"]).astype(np.float64)
-    res = []
-    for i in range(len(AllFeatures)):
-        if (x["PVALUE"][i] > alpha):
-            continue
-        res.append(dp(AllFeatures[i]))
-        res[-1]['COEF'] = x["COEF"][i]
-        res[-1]['PVALUE'] = x["PVALUE"][i]
-        res[-1]['COEF_ABS'] = abs(x["COEF"][i])
-    res = pd.DataFrame(res)
-    res = res.sort_values(by='COEF_ABS', ascending=False)
-    DATAFRAME = res.drop(['COEF_ABS'], axis=1)
-    DATAFRAME = DATAFRAME.fillna(0)
-    DATAFRAME['Rank'] = np.arange(1, len(DATAFRAME) + 1)
-    PairWise = pd.DataFrame()
-    for i in range(13):
-        temp = mycol.find_one({'ID': int(DATAFRAME.iloc[i, 0])}, {"HCTSA_TIMESERIES_VALUE": 1})
-        PairWise[DATAFRAME.iloc[i, 1]] = temp['HCTSA_TIMESERIES_VALUE']
-    PairWise = PairWise.fillna(0)
-    pairwise_corr = PairWise.corr(method="spearman").abs()
-    g = sns.clustermap(pairwise_corr, method="complete", annot=True, linewidth=0.5, square=True)
-    columns = list(PairWise.columns)
-    N = len(columns)
-    wanted_label = fname
-    wanted_row = g.dendrogram_row.reordered_ind.index(columns.index(wanted_label))
-    wanted_col = g.dendrogram_col.reordered_ind.index(columns.index(wanted_label))
-    xywh_row = (0, wanted_row, N, 1)
-    xywh_col = (wanted_col, 0, 1, N)
-    for x, y, w, h in (xywh_row, xywh_col):
-        g.ax_heatmap.add_patch(Rectangle((x, y), w, h, fill=False, edgecolor='Blue', lw=4, clip_on=True))
-    g.ax_heatmap.tick_params(length=0)
-    myfig = plt.gcf()
-    buf = io.BytesIO()
-    myfig.savefig(buf, format='png')
-    buf.seek(0)
-    string = base64.b64encode(buf.read())
-    uri = urllib.parse.quote(string)
-    scatterPlotsData = {
-        'xaxis': {
-            'xdata': splittimeseries(PairWise[fname].rank()),
-            'xtit': fname
-        },
-        'yaxes': []
-    }
-    TimeseriesNamesDivided = splittimeseries(AlltimeSeriesNames)
-    for i in range(1, 13):
-        gr = {
-            'title': "Correlation = " + str(DATAFRAME.iloc[i, 3]),
-            'ytit': DATAFRAME.iloc[i, 1],
-            'ydata': splittimeseries(PairWise[DATAFRAME.iloc[i, 1]].rank())
+        x = mycol.find_one({'ID': int(number)},
+                           {"_id": 0, "NAME": 0, "KEYWORDS": 0, "ID": 0, "HCTSA_TIMESERIES_VALUE": 0})
+        x["COEF"] = np.array(x["COEF"]).astype(np.float64)
+        x["PVALUE"] = np.array(x["PVALUE"]).astype(np.float64)
+        res = []
+        for i in range(len(AllFeatures)):
+            if (x["PVALUE"][i] > alpha):
+                continue
+            res.append(dp(AllFeatures[i]))
+            res[-1]['COEF'] = x["COEF"][i]
+            res[-1]['PVALUE'] = x["PVALUE"][i]
+            res[-1]['COEF_ABS'] = abs(x["COEF"][i])
+        res = pd.DataFrame(res)
+        res = res.sort_values(by='COEF_ABS', ascending=False)
+        DATAFRAME = res.drop(['COEF_ABS'], axis=1)
+        DATAFRAME = DATAFRAME.fillna(0)
+        DATAFRAME['Rank'] = np.arange(1, len(DATAFRAME) + 1)
+        PairWise = pd.DataFrame()
+        for i in range(13):
+            temp = mycol.find_one({'ID': int(DATAFRAME.iloc[i, 0])}, {"HCTSA_TIMESERIES_VALUE": 1})
+            PairWise[DATAFRAME.iloc[i, 1]] = temp['HCTSA_TIMESERIES_VALUE']
+        PairWise = PairWise.fillna(0)
+        pairwise_corr = PairWise.corr(method="spearman").abs()
+        g = sns.clustermap(pairwise_corr, method="complete", annot=True, linewidth=0.5, square=True)
+        columns = list(PairWise.columns)
+        N = len(columns)
+        wanted_label = fname
+        wanted_row = g.dendrogram_row.reordered_ind.index(columns.index(wanted_label))
+        wanted_col = g.dendrogram_col.reordered_ind.index(columns.index(wanted_label))
+        xywh_row = (0, wanted_row, N, 1)
+        xywh_col = (wanted_col, 0, 1, N)
+        for x, y, w, h in (xywh_row, xywh_col):
+            g.ax_heatmap.add_patch(Rectangle((x, y), w, h, fill=False, edgecolor='Blue', lw=4, clip_on=True))
+        g.ax_heatmap.tick_params(length=0)
+        myfig = plt.gcf()
+        buf = io.BytesIO()
+        myfig.savefig(buf, format='png')
+        buf.seek(0)
+        string = base64.b64encode(buf.read())
+        uri = urllib.parse.quote(string)
+        scatterPlotsData = {
+            'xaxis': {
+                'xdata': splittimeseries(PairWise[fname].rank()),
+                'xtit': fname
+            },
+            'yaxes': []
         }
-        scatterPlotsData['yaxes'].append(gr)
-    pairwise_corr = PairWise.corr(method="spearman")
-    names = list(pairwise_corr.columns)
-    networkGraph = {
-        'nodes': [],
-        'edges': []
-    }
-    for i in range(len(names)):
-        networkGraph['nodes'].append({
-            'id': i,
-            'title': int(DATAFRAME['ID'].iloc[i])
-        })
-    for i in range(len(names)):
-        for j in range(i + 1, len(names)):
-            networkGraph['edges'].append({
-                'to': j,
-                'from': i,
-                'label': format(pairwise_corr[names[i]][names[j]], '.3f')
+        TimeseriesNamesDivided = splittimeseries(AlltimeSeriesNames)
+        for i in range(1, 13):
+            gr = {
+                'title': "Correlation = " + str(DATAFRAME.iloc[i, 3]),
+                'ytit': DATAFRAME.iloc[i, 1],
+                'ydata': splittimeseries(PairWise[DATAFRAME.iloc[i, 1]].rank())
+            }
+            scatterPlotsData['yaxes'].append(gr)
+        pairwise_corr = PairWise.corr(method="spearman")
+        names = list(pairwise_corr.columns)
+        networkGraph = {
+            'nodes': [],
+            'edges': []
+        }
+        for i in range(len(names)):
+            networkGraph['nodes'].append({
+                'id': i,
+                'title': int(DATAFRAME['ID'].iloc[i])
             })
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                networkGraph['edges'].append({
+                    'to': j,
+                    'from': i,
+                    'label': format(pairwise_corr[names[i]][names[j]], '.3f')
+                })
 
-    totalmatches = len(DATAFRAME)
-    DATAFRAME["id"] = DATAFRAME["ID"].astype("int64")
-    DATAFRAME = DATAFRAME.drop(['NAME'], axis=1)
-    DATAFRAME = DATAFRAME.drop(['KEYWORDS'], axis=1)
-    DATAFRAME = DATAFRAME.drop(['ID'], axis=1)
-    res = []
-    for index, row in list(DATAFRAME.iterrows()):
-        res.append(dict(row))
+        totalmatches = len(DATAFRAME)
+        DATAFRAME["id"] = DATAFRAME["ID"].astype("int64")
+        DATAFRAME = DATAFRAME.drop(['NAME'], axis=1)
+        DATAFRAME = DATAFRAME.drop(['KEYWORDS'], axis=1)
+        DATAFRAME = DATAFRAME.drop(['ID'], axis=1)
+        res = []
+        for index, row in list(DATAFRAME.iterrows()):
+            res.append(dict(row))
 
-    return JsonResponse(
-        {"tabledata": res, "totalmatches": totalmatches, "featurename": fname, "heatmap": uri,
-         "scatterplotgraphs": scatterPlotsData, "timeseriesnames": TimeseriesNamesDivided,
-         "timeseriescategory": TimeSeriesCategory, "networkGraph": networkGraph})
+        return JsonResponse(
+            {"tabledata": res, "totalmatches": totalmatches, "featurename": fname, "heatmap": uri,
+             "scatterplotgraphs": scatterPlotsData, "timeseriesnames": TimeseriesNamesDivided,
+             "timeseriescategory": TimeSeriesCategory, "networkGraph": networkGraph})
+    except Exception:
+        return JsonResponse({"error": "Recheck the API request made"})
 
 
 buffer = OrderedDict()
@@ -504,17 +505,17 @@ def apiresult(request):
             featurevalue = execute_user_code(byte_code, Alltimeseries[i])
             New_feature_vector.append(featurevalue)
 
-    New_feature_vector = []
-    if request.method != 'POST':
-        return JsonResponse({"stat": 5})
-    featurename = request.POST['featurename']
-    featurecode = request.FILES['featurecode']
-    fs = FileSystemStorage()
-    modulename = fs.save(featurecode.name, featurecode).replace(".py", "")
-    MAX_ITER_LEN = 1000000000000000
-    with open(f"media\{modulename}.py") as f:
-        usercode = f.read()
     try:
+        New_feature_vector = []
+        if request.method != 'POST':
+            return JsonResponse({"stat": 5})
+        featurename = request.POST['featurename']
+        featurecode = request.FILES['featurecode']
+        fs = FileSystemStorage()
+        modulename = fs.save(featurecode.name, featurecode).replace(".py", "")
+        MAX_ITER_LEN = 1000000000000000
+        with open(f"media\{modulename}.py") as f:
+            usercode = f.read()
         try:
             func_timeout(300, Execute_User_Code)
         except FunctionTimedOut:
